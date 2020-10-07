@@ -6,8 +6,9 @@
 #include <ESP8266WiFi.h>
 
 // Replace these with your WiFi network settings
-const char* ssid = "Max-Box2"; //replace this with your WiFi network name
-const char* password = "ilovemaxbundy!"; //replace this with your WiFi network password
+#include <privateCredentials.h>
+const char *ssid = WIFI_PRIVATE_SSID;
+const char *password = WIFI_PRIVATE_PASSWORD;
 
 void setup()
 {

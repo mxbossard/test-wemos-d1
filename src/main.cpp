@@ -11,4 +11,6 @@
 
 //#include <https_over_wifi_test.h>
 
-#include <json_display_test.h>
+#include <wifi_scan.h>
+
+//#include <web_json_display_test.h>

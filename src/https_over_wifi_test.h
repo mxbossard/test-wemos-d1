@@ -5,8 +5,9 @@
 #include <ESP8266HTTPClient.h>
 
 // Define the WiFi settings.
-const char *ssid = "Max-Box2";
-const char *password = "ilovemaxbundy!";
+#include <privateCredentials.h>
+const char *ssid = WIFI_PRIVATE_SSID;
+const char *password = WIFI_PRIVATE_PASSWORD;
 // Define the hostname, the port number and the fingerprint.
 const char *host = "mby.fr"; // "176.31.116.137"; //
 const char fingerprint[] PROGMEM = "fingerprint";

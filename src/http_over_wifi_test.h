@@ -16,8 +16,9 @@
 //#include "arduino_secrets.h"
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 /////// Wifi Settings ///////
-char ssid[] = "Max-Box2";
-char pass[] = "ilovemaxbundy!";
+#include <privateCredentials.h>
+char ssid[] = WIFI_PRIVATE_SSID;
+char password[] = WIFI_PRIVATE_PASSWORD;
 
 char serverAddress[] = "176.31.116.137";  // server address
 int port = 443;

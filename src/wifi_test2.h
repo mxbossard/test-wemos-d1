@@ -123,8 +123,9 @@ String ssid = "ESP_" + String(ESP_getChipId(), HEX);
 const char* password = "your_password";
 
 // SSID and PW for your Router
-String Router_SSID = "Max-Box2";
-String Router_Pass = "ilovemaxbundy!";
+#include <privateCredentials.h>
+String Router_SSID = WIFI_PRIVATE_SSID;
+String Router_Pass = WIFI_PRIVATE_PASSWORD;
 
 // From v1.1.0
 // You only need to format the filesystem once
