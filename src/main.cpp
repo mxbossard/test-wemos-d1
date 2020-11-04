@@ -23,4 +23,6 @@
 
 //#include <test_bme280.h>
 
-#include <test_dht22.h>
+//#include <test_dht22.h>
+
+#include <remote_temp_sensor.h>

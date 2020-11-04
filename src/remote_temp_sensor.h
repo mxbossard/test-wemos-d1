@@ -44,12 +44,16 @@ const String httpUrl = String(httpProtocol) + "://" + String(httpHost) + ":" +  
 
 // DHT sensor connected to D7
 DHT_Unified dht(D7, DHTTYPE);
+Adafruit_Sensor *dht_temp = dht.temperature();
+Adafruit_Sensor *dht_humidity = dht.humidity();
 
 // BME280 sensor on I2C
 Adafruit_BME280 bme; // use I2C interface
 Adafruit_Sensor *bme_temp = bme.getTemperatureSensor();
-Adafruit_Sensor *bme_pressure = bme.getPressureSensor();
 Adafruit_Sensor *bme_humidity = bme.getHumiditySensor();
+Adafruit_Sensor *bme_pressure = bme.getPressureSensor();
+
+HTTPClient client;
 
 void WiFiOff() {
     WiFi.mode(WIFI_OFF);
@@ -59,16 +63,39 @@ void WiFiOff() {
 
 void waitForWiFiConnection() {
     // Halt the code until connected to WiFi.
-    int k = 0;
     while (WiFi.status() != WL_CONNECTED) {
-        k++;
-        delay(1000);
-        Serial.print(".");
-        if (k % 10 == 0) {
-            Serial.print("Wi-Fi current status: ");
-            Serial.println(WiFi.status());
-        }
+        delay(10);
     }
+}
+
+/**
+ * Return [temperature, humidty, pressure]
+ */ 
+float * probeBme280() {
+    static float array[3];
+    sensors_event_t temp_event, pressure_event, humidity_event;
+    bme_temp->getEvent(&temp_event);
+    bme_pressure->getEvent(&pressure_event);
+    bme_humidity->getEvent(&humidity_event);
+
+    array[0] = temp_event.temperature;
+    array[1] = humidity_event.relative_humidity;
+    array[2] = pressure_event.pressure;
+    return array;
+}
+
+/**
+ * Return [temperature, humidty]
+ */ 
+float * probeDht22() {
+    static float array[2];
+    sensors_event_t temp_event, humidity_event;
+    dht_temp->getEvent(&temp_event);
+    dht_humidity->getEvent(&humidity_event);
+
+    array[0] = temp_event.temperature;
+    array[1] = humidity_event.relative_humidity;
+    return array;
 }
 
 void setup() {
@@ -85,40 +112,41 @@ void setup() {
 
     Serial.begin(115200);
 
-    // ##### BME280 management
-    sensors_event_t temp_event, pressure_event, humidity_event;
-    bme_temp->getEvent(&temp_event);
-    bme_pressure->getEvent(&pressure_event);
-    bme_humidity->getEvent(&humidity_event);
+    sensor_t sensor;
 
+    int probingDelay = 1000;
+    Adafruit_Sensor * sensors = [bme_temp, bme_humidity, bme_pressure, dht_temp, dht_humidity];
+    for(Adafruit_Sensor &as : sensors) {
+        as->getSensor(&sensor);
+        Serial.println("Checking min_delay of sensor " + as->sensor_id);
+        probingDelay = max(probingDelay, sensor.min_delay / 1000);
+    }
 
+    // Wait 2 sec to be sure Charge Pump is stabilized
+    delay(2000);
 
-    // ##### DHT management
+    byte probeCount = 3;
+    for (int k=0; k < probeCount; k++) {
+        Serial.println("Probing #" + k + " of " + probeCount " attempts...");
+        float * bme280DDatas = probeBme280();
+        float * dht22Datas = probeDht22();
+
+        Serial.println("BME 280 datas: " + bme280DDatas[0] + " ; " + bme280DDatas[1] + " ; " + bme280DDatas[2]);
+        Serial.println("DHT 22 datas: " + dht22Datas[0] + " ; " + dht22Datas[1]);
+
+        delay(probingDelay);
+    }
+
     // Initialize device.
     dht.begin();
     sensor_t sensor;
     uint32_t delayMS = sensor.min_delay / 1000;
+
     // Delay between measurements.
     delay(delayMS);
+
     // Get temperature event and print its value.
-    sensors_event_t event;
-    dht.temperature().getEvent(&event);
-    if (isnan(event.temperature)) {
-        Serial.println(F("Error reading temperature!"));
-    }
-    else {
-        Serial.print(F("Temperature: "));
-        Serial.print(event.temperature);
-        Serial.println(F("°C"));
-    }
-    // Get humidity event and print its value.
-    dht.humidity().getEvent(&event);
-    if (isnan(event.relative_humidity)) {
-        Serial.println(F("Error reading humidity!"));
-    }
-    else {
-        Serial.print(F("Humidity: "));
-        Serial.print(event.relative_humidity);
-        Serial.println(F("%"));
-    }
+    
 }
+
+void loop() {}
