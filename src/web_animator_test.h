@@ -33,7 +33,7 @@ const int HTTP_TIMEOUT = 10000;
 #define HTTP 1
 #define HTTPS 2
 
-#define HTTP_PROTOCOL HTTP
+#define HTTP_PROTOCOL "http"
 #define HTTP_HOST "192.168.0.16"
 #define HTTP_PORT 3000
 #define HTTP_ENDPOINT "/tao"
@@ -42,12 +42,10 @@ const int HTTP_TIMEOUT = 10000;
 // Define the WiFi settings.
 const char *ssid = WIFI_PRIVATE_SSID;
 const char *password = WIFI_PRIVATE_PASSWORD;
-
 const char *httpHost = HTTP_HOST;
 const int httpPort = HTTP_PORT;
 const char *httpEndpoint = HTTP_ENDPOINT;
-
-const String webpage = "http://" + String(httpHost) + ":" +  String(httpPort) + String(httpEndpoint);
+const String webpage = HTTP_PROTOCOL + "://" + String(httpHost) + ":" +  String(httpPort) + String(httpEndpoint);
 
 /*
 void WiFiOn() {
