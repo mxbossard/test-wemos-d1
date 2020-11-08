@@ -37,7 +37,8 @@
 
 #define PROBE_MINIMUM_SIGNIFICANT_VALUES 3
 #define PROBE_MAXIMUM_PROBING_ITERATION 5
-#define ADC_CORRECTION_RATIO ( 6.0 / 5.93 )
+#define PROBE_SLEEP_DELAY_IN_SEC 60
+#define ADC_CORRECTION_RATIO ( 1 )
 
 // Define the WiFi settings.
 const char *ssid = WIFI_PRIVATE_SSID;
@@ -238,6 +239,9 @@ void setup() {
 
     Serial.begin(115200);
    
+    uint32_t espUid = ESP.getChipId();
+    String macAddress = WiFi.macAddress();
+
     HTTPClient client;
 
     /*
@@ -335,7 +339,7 @@ void setup() {
         Serial.println("/!\\ Got some errors !");
     }
 
-    String payload = "{\"data\":{\"bme280\": {\"temperature\": " + bme280Temp + ", \"humidity\": " + bme280Humidity + ", \"pressure\": " + bme280Pressure + "}, \"dht22\": {\"temperature\": " + dht22Temp + ", \"humidity\": " + dht22Humidity + "}, \"battery\":" + batteryVoltage + ", \"errors\":" + errorCount + "}}";
+    String payload = "{\"data\":{\"uid\": " + String(espUid) + ", \"mac\": \"" + macAddress + "\", \"bme280\": {\"temperature\": " + bme280Temp + ", \"humidity\": " + bme280Humidity + ", \"pressure\": " + bme280Pressure + "}, \"dht22\": {\"temperature\": " + dht22Temp + ", \"humidity\": " + dht22Humidity + "}, \"battery\":" + batteryVoltage + ", \"errors\":" + errorCount + "}}";
     Serial.println("Payload JSON: " + payload);
 
     waitForWiFiConnection();
@@ -352,11 +356,11 @@ void setup() {
 
     WiFiOff();
 
-    ESP.deepSleep(5000000);
+    ESP.deepSleep(PROBE_SLEEP_DELAY_IN_SEC * 1000000);
 }
 
 void loop() {
-    delay(5000);
+    delay(PROBE_SLEEP_DELAY_IN_SEC * 1000);
     setup();
 }
 
