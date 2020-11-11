@@ -3,7 +3,8 @@
 #include <DHT_U.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
-
+#include <CayenneLPP.h>
+#include "Hash.h"
 
 #if defined(ESP8266)
  #include <ESP8266WiFi.h>
@@ -25,20 +26,34 @@
 #define D7 13
 #define D8 15
 
-//#define SDA_PIN 4
-//#define SCL_PIN 5
+//#define DEBUG
 
 #define DHTTYPE DHT22
 
 #define HTTP_PROTOCOL "http"
 #define HTTP_HOST "192.168.0.16"
 #define HTTP_PORT 3000
-#define HTTP_ENDPOINT "/sensors"
+#define HTTP_ENDPOINT "/lpp"
 
 #define PROBE_MINIMUM_SIGNIFICANT_VALUES 3
 #define PROBE_MAXIMUM_PROBING_ITERATION 5
-#define PROBE_SLEEP_DELAY_IN_SEC 60
 #define ADC_CORRECTION_RATIO ( 1 )
+
+#ifdef DEBUG
+  #define PROBE_SLEEP_DELAY_IN_SEC 5
+#else
+  #define PROBE_SLEEP_DELAY_IN_SEC 60
+#endif
+
+#define LPP_BOARD_CHANNEL 0
+#define LPP_BME280_CHANNEL 1
+#define LPP_DHT22_CHANNEL 2
+#define LPP_BOARD_PROBE_COUNT_CHANNEL (100 + 0)
+#define LPP_BME280_PROBE_COUNT_CHANNEL (100 + 1)
+#define LPP_DHT22_PROBE_COUNT_CHANNEL (100 + 2)
+#define LPP_BOARD_ERROR_COUNT_CHANNEL (200 + 0)
+#define LPP_BME280_ERROR_COUNT_CHANNEL (200 + 1)
+#define LPP_DHT22_ERROR_COUNT_CHANNEL (200 + 2)
 
 // Define the WiFi settings.
 const char *ssid = WIFI_PRIVATE_SSID;
@@ -187,6 +202,11 @@ int sortFloatAsc(const void *cmp1, const void *cmp2) {
     return a - b;
 }
 
+/**
+ * Return the median of a float array.
+ * Exclude NAN values.
+ * return a NAN value if less than PROBE_MINIMUM_SIGNIFICANT_VALUES non NAN values in the array.
+ */
 float medianOfArray(float array[]) {
     //Serial.println("medianOfArray with array[0]: " + String(array[0]));
     int arrayLength = sizeof(array) - 1;
@@ -221,7 +241,19 @@ float medianOfArray(float array[]) {
     return medianValue;
 }
 
-void setup() {
+void array_to_string(byte array[], unsigned int len, char buffer[])
+{
+    for (unsigned int i = 0; i < len; i++)
+    {
+        byte nib1 = (array[i] >> 4) & 0x0F;
+        byte nib2 = (array[i] >> 0) & 0x0F;
+        buffer[i*2+0] = nib1  < 0xA ? '0' + nib1  : 'A' + nib1  - 0xA;
+        buffer[i*2+1] = nib2  < 0xA ? '0' + nib2  : 'A' + nib2  - 0xA;
+    }
+    buffer[len*2] = '\0';
+}
+
+void doWork() {
     // Start Wi-Fi
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
@@ -238,9 +270,14 @@ void setup() {
     analogWrite (D3, 512) ;
 
     Serial.begin(115200);
+    Serial.println("");
    
     uint32_t espUid = ESP.getChipId();
-    String macAddress = WiFi.macAddress();
+    String espMacAddress = WiFi.macAddress();
+    String uid = String(espUid) + "_" + espMacAddress;
+    String sensorLongId = sha1(uid);
+    String sensorShortId = sensorLongId.substring(0, 7);
+    Serial.println("sensorShortId: " + sensorShortId + " ; UID: " + uid + " ; sensorLongId: " + sensorLongId);
 
     HTTPClient client;
 
@@ -282,6 +319,8 @@ void setup() {
         dht22HumidityValues[k] = NAN;   
     }
 
+    Serial.println("");
+
     for (int k=0; k < probeCount; k++) {
         Serial.println("Probing #" + String(k + 1) + " of " + String(probeCount) + " ...");
         
@@ -318,37 +357,87 @@ void setup() {
         }
     }
 
-    String batteryVoltage = String(medianOfArray(batVoltageValues), 3);
-    Serial.println("Battery voltage: " + batteryVoltage + " V");
+    if (errorCount > 0) {
+        Serial.println("/!\\ Got some errors !");
+    }
 
-    String bme280Temp = String(medianOfArray(bme280tempValues));
-    String bme280Humidity = String(medianOfArray(bme280HumidityValues));
-    String bme280Pressure = String(medianOfArray(bme280PressureValues));
+    float batVoltageValue = medianOfArray(batVoltageValues);
+    float bme280tempValue = medianOfArray(bme280tempValues);
+    float bme280HumidityValue = medianOfArray(bme280HumidityValues);
+    float bme280PressureValue = medianOfArray(bme280PressureValues);
+    float dht22tempValue = medianOfArray(dht22tempValues);
+    float dht22HumidityValue = medianOfArray(dht22HumidityValues);
+
+    CayenneLPP lpp(128);
+    lpp.reset();
+    if (!isnan(batVoltageValue))
+        lpp.addVoltage(LPP_BOARD_CHANNEL, batVoltageValue);
+    if (!isnan(bme280tempValue))
+        lpp.addTemperature(LPP_BME280_CHANNEL, bme280tempValue);
+    if (!isnan(bme280HumidityValue))
+        lpp.addRelativeHumidity(LPP_BME280_CHANNEL, bme280HumidityValue);
+    if (!isnan(bme280PressureValue))
+        lpp.addBarometricPressure(LPP_BME280_CHANNEL, bme280PressureValue);
+    if (!isnan(dht22tempValue))
+        lpp.addTemperature(LPP_DHT22_CHANNEL, dht22tempValue);
+    if (!isnan(dht22HumidityValue))
+        lpp.addRelativeHumidity(LPP_DHT22_CHANNEL, dht22HumidityValue);
+    
+    // Error count
+    lpp.addDigitalInput(LPP_BOARD_ERROR_COUNT_CHANNEL, errorCount);
+    lpp.addDigitalInput(LPP_BME280_ERROR_COUNT_CHANNEL, errorCount);
+    lpp.addDigitalInput(LPP_DHT22_ERROR_COUNT_CHANNEL, errorCount);
+
+    // Probe count
+    lpp.addDigitalInput(LPP_BOARD_PROBE_COUNT_CHANNEL, probeCount);
+    lpp.addDigitalInput(LPP_BME280_PROBE_COUNT_CHANNEL, probeCount);
+    lpp.addDigitalInput(LPP_DHT22_PROBE_COUNT_CHANNEL, probeCount);
+    
+    
+    DynamicJsonDocument jsonBuffer(1024);
+    JsonArray root = jsonBuffer.to<JsonArray>();
+    lpp.decode(lpp.getBuffer(), lpp.getSize(), root);
+    serializeJsonPretty(root, Serial);
+    Serial.println("");
+
+    /*
+    String batteryVoltage = String(batVoltageValue, 3);
+    String bme280Temp = String(bme280tempValue, 2);
+    String bme280Humidity = String(bme280HumidityValue, 1);
+    String bme280Pressure = String(bme280PressureValue, 1);
+    String dht22Temp = String(dht22tempValue, 2);
+    String dht22Humidity = String(dht22HumidityValue, 1);
+    
+    Serial.println("Battery voltage: " + batteryVoltage + " V");
     Serial.println("BME 280 temperature: " + bme280Temp + " °C");
     Serial.println("BME 280 humidity: " + bme280Humidity + " %");
     Serial.println("BME 280 pressure: " + bme280Pressure + " hPa");
-
-    String dht22Temp = String(medianOfArray(dht22tempValues));
-    String dht22Humidity = String(medianOfArray(dht22HumidityValues));
     Serial.println("DHT 22 temperature: " + dht22Temp + " °C");
     Serial.println("DHT 22 humidity: " + dht22Humidity + " %");
 
     Serial.println("");
 
-    if (errorCount > 0) {
-        Serial.println("/!\\ Got some errors !");
-    }
-
     String payload = "{\"data\":{\"uid\": " + String(espUid) + ", \"mac\": \"" + macAddress + "\", \"bme280\": {\"temperature\": " + bme280Temp + ", \"humidity\": " + bme280Humidity + ", \"pressure\": " + bme280Pressure + "}, \"dht22\": {\"temperature\": " + dht22Temp + ", \"humidity\": " + dht22Humidity + "}, \"battery\":" + batteryVoltage + ", \"errors\":" + errorCount + "}}";
     Serial.println("Payload JSON: " + payload);
+    */
 
     waitForWiFiConnection();
+    String postUrl = httpUrl + "/" + sensorShortId;
+    Serial.print("Posting data to URL: ");
+    Serial.println(postUrl);
 
-    client.begin(httpUrl);
-    client.addHeader("Content-Type", "application/json");
+    client.begin(postUrl);
+    //client.addHeader("Content-Type", "application/json");
+    client.addHeader("Content-Type", "application/octet-stream");
 
     //client.begin(WiFi, httpHost, httpPort, httpEndpoint, httpProtocol == "https");
-    int httpCode = client.POST(payload);
+    
+    char str[128] = "";
+    array_to_string(lpp.getBuffer(), lpp.getSize(), str);
+    Serial.print("LPP: ");
+    Serial.println(str);
+
+    int httpCode = client.POST(lpp.getBuffer(), lpp.getSize());
     if (httpCode == 200) {
         Serial.println("Data successfully posted.");
     }
@@ -356,11 +445,24 @@ void setup() {
 
     WiFiOff();
 
-    ESP.deepSleep(PROBE_SLEEP_DELAY_IN_SEC * 1000000);
+    Serial.println("Work done.");
+}
+
+void setup() {
+
 }
 
 void loop() {
-    delay(PROBE_SLEEP_DELAY_IN_SEC * 1000);
-    setup();
+    Serial.println("Launching doWork() ...");
+    doWork();
+
+#ifndef DEBUG
+    ESP.deepSleep(1000000 * PROBE_SLEEP_DELAY_IN_SEC);
+#endif
+
+    Serial.println("Not sleeping.");
+
+    Serial.println("Will wait for " + String(PROBE_SLEEP_DELAY_IN_SEC) + " seconds ...");
+    delay(1000 * PROBE_SLEEP_DELAY_IN_SEC);
 }
 
