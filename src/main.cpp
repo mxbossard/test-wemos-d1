@@ -25,4 +25,6 @@
 
 //#include <test_dht22.h>
 
-#include <remote_temp_sensor.h>
+//#include <remote_temp_sensor_http.h>
+
+#include <remote_temp_sensor_https.h>
